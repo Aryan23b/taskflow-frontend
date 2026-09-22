@@ -21,6 +21,7 @@ export interface TaskResponse {
   assignedToUserName: string | null;
 }
 
+export type Task = TaskResponse;
 
 
 export interface TaskRequest {
