@@ -8,7 +8,7 @@ export type TaskPriority =
   | "MEDIUM"
   | "HIGH";
 
-export interface Task {
+export interface TaskResponse {
   id: number;
   title: string;
   description: string | null;
@@ -16,10 +16,12 @@ export interface Task {
   priority: TaskPriority;
   dueDate: string | null;
   projectId: number;
-  projectName: string;
+  projectName?: string;
   assignedToUserId: number | null;
   assignedToUserName: string | null;
 }
+
+
 
 export interface TaskRequest {
   title: string;

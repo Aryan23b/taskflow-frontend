@@ -1,10 +1,12 @@
-export interface Project {
+export interface ProjectResponse {
   id: number;
   name: string;
-  description: string | null;
+  description?: string;
   ownerId: number;
-  ownerName: string;
+  ownerName?: string;
 }
+
+export type Project = ProjectResponse;
 
 export interface ProjectRequest {
   name: string;

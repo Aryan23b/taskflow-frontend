@@ -1,11 +1,5 @@
-import {
-  useEffect,
-  useState,
-} from "react";
-
-import UserCard from "../components/UserCard";
-import UserModal from "../components/UserModal";
-import ConfirmDialog from "../components/ConfirmDialog";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
   createUser,
@@ -17,369 +11,484 @@ import {
   getTasks,
 } from "../services/taskService";
 
-import {
-  useToast,
-} from "../context/ToastContext";
-
-import {
-  getApiErrorMessage,
-} from "../utils/apiError";
-
 import type {
-  User,
   UserRequest,
+  UserResponse,
 } from "../types/user";
 
+import { getApiErrorMessage } from "../utils/apiError";
 
-interface UserWithCount {
-  user: User;
-  assignedTaskCount: number;
+interface UserWithTaskCount extends UserResponse {
+  taskCount: number;
 }
 
-
 export default function Users() {
+  const navigate = useNavigate();
 
-  const { showToast } =
-    useToast();
+  const [users, setUsers] = useState<UserWithTaskCount[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-
-  const [users, setUsers] =
-    useState<UserWithCount[]>([]);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [error, setError] =
-    useState<string | null>(null);
-
-  const [modalOpen, setModalOpen] =
+  const [showCreateForm, setShowCreateForm] =
     useState(false);
 
-  const [deleteTarget, setDeleteTarget] =
-    useState<User | null>(null);
+  const [form, setForm] = useState<UserRequest>({
+    name: "",
+    email: "",
+    password: "",
+    role: "USER",
+  });
 
+  const [creating, setCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(
+    null
+  );
 
-  useEffect(() => {
+  // =========================================
+  // LOAD USERS
+  // =========================================
 
-    loadUsers();
-
-  }, []);
-
-
-  async function loadUsers() {
-
+  const loadUsers = async () => {
     try {
-
       setLoading(true);
-      setError(null);
+      setError("");
 
-      const userData =
-        await getUsers();
+      const userData = await getUsers();
 
-
-      const usersWithCounts =
+      const usersWithTaskCount =
         await Promise.all(
-
-          userData.map(
-            async (user) => {
-
-              const taskPage =
-                await getTasks({
-                  assignedUserId:
-                    user.id,
-                  page: 0,
-                  size: 1,
-                });
+          userData.map(async (user) => {
+            try {
+              const taskPage = await getTasks({
+                assignedUserId: user.id,
+                page: 0,
+                size: 1,
+              });
 
               return {
-                user,
-                assignedTaskCount:
-                  taskPage.totalElements,
+                ...user,
+                taskCount: taskPage.totalElements,
+              };
+            } catch {
+              return {
+                ...user,
+                taskCount: 0,
               };
             }
-          )
+          })
         );
 
-
-      setUsers(
-        usersWithCounts
-      );
-
-    } catch (err) {
-
-      console.error(err);
-
-      const message =
+      setUsers(usersWithTaskCount);
+    } catch (error) {
+      setError(
         getApiErrorMessage(
-          err,
-          "Unable to load team members."
-        );
-
-      setError(message);
-
+          error,
+          "Failed to load users."
+        )
+      );
     } finally {
-
       setLoading(false);
     }
-  }
+  };
 
+  useEffect(() => {
+    loadUsers();
+  }, []);
 
-  async function handleCreate(
-    data: UserRequest
-  ) {
+  // =========================================
+  // CREATE USER
+  // =========================================
 
-    try {
+  const handleCreateUser = async (
+    event: React.FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
 
-      await createUser(data);
-
-      await loadUsers();
-
-      setModalOpen(false);
-
-      showToast(
-        "Team member added successfully."
-      );
-
-    } catch (err) {
-
-      console.error(err);
-
-      const message =
-        getApiErrorMessage(
-          err,
-          "Unable to create user."
-        );
-
-      setError(message);
-
-      showToast(
-        message,
-        "error"
-      );
-
-      throw err;
+    if (!form.name.trim()) {
+      setError("Name is required.");
+      return;
     }
-  }
 
+    if (!form.email.trim()) {
+      setError("Email is required.");
+      return;
+    }
 
-  function handleDeleteRequest(
-    user: User
-  ) {
+    if (!form.password.trim()) {
+      setError("Password is required.");
+      return;
+    }
 
-    setDeleteTarget(user);
-  }
-
-
-  async function handleDeleteConfirm() {
-
-    if (!deleteTarget) {
+    if (form.password.length < 6) {
+      setError(
+        "Password must be at least 6 characters."
+      );
       return;
     }
 
     try {
+      setCreating(true);
+      setError("");
 
-      await deleteUser(
-        deleteTarget.id
-      );
+      await createUser({
+        name: form.name.trim(),
+        email: form.email.trim(),
+        password: form.password,
+        role: form.role,
+      });
 
-      showToast(
-        `${deleteTarget.name} deleted successfully.`
-      );
+      setForm({
+        name: "",
+        email: "",
+        password: "",
+        role: "USER",
+      });
 
-      setDeleteTarget(null);
+      setShowCreateForm(false);
 
       await loadUsers();
-
-    } catch (err) {
-
-      console.error(err);
-
-      const message =
+    } catch (error) {
+      setError(
         getApiErrorMessage(
-          err,
-          "Unable to delete user."
-        );
-
-      setError(message);
-
-      showToast(
-        message,
-        "error"
+          error,
+          "Failed to create user."
+        )
       );
+    } finally {
+      setCreating(false);
     }
-  }
+  };
 
+  // =========================================
+  // DELETE USER
+  // =========================================
 
-  return (
-    <div className="mx-auto max-w-7xl space-y-6">
+  const handleDeleteUser = async (id: number) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this user?"
+    );
 
+    if (!confirmed) {
+      return;
+    }
 
-      {/* Header */}
+    try {
+      setDeletingId(id);
+      setError("");
 
-      <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      await deleteUser(id);
 
-        <div>
+      setUsers((currentUsers) =>
+        currentUsers.filter(
+          (user) => user.id !== id
+        )
+      );
+    } catch (error) {
+      setError(
+        getApiErrorMessage(
+          error,
+          "Failed to delete user."
+        )
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-300">
-            Workspace
-          </p>
+  // =========================================
+  // LOADING
+  // =========================================
 
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">
-            Team
-          </h1>
+  if (loading) {
+    return (
+      <div className="min-h-screen p-6 md:p-8">
 
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-            See who's involved and how work is distributed across the workspace.
-          </p>
+        <div className="mb-8">
+          <div className="h-8 w-32 animate-pulse rounded-lg bg-slate-800" />
 
+          <div className="mt-3 h-4 w-64 animate-pulse rounded bg-slate-800" />
         </div>
 
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div
+              key={index}
+              className="h-52 animate-pulse rounded-2xl border border-slate-800 bg-slate-900"
+            />
+          ))}
+        </div>
+
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen p-6 md:p-8">
+
+      {/* =====================================
+          HEADER
+      ====================================== */}
+
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+        <div>
+          <h1 className="text-3xl font-bold text-white">
+            Users
+          </h1>
+
+          <p className="mt-1 text-sm text-slate-400">
+            Manage TaskFlow users and their assigned tasks.
+          </p>
+        </div>
 
         <button
+          type="button"
           onClick={() =>
-            setModalOpen(true)
+            setShowCreateForm((value) => !value)
           }
-          className="rounded-2xl bg-indigo-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:-translate-y-0.5 hover:bg-indigo-400"
+          className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-indigo-500"
         >
-          + Add Member
+          {showCreateForm
+            ? "Cancel"
+            : "+ Add User"}
         </button>
 
-      </section>
+      </div>
 
-
-      {/* Error */}
+      {/* =====================================
+          ERROR
+      ====================================== */}
 
       {error && (
-        <div className="flex items-start justify-between gap-4 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-300">
-
-          <span>
-            {error}
-          </span>
-
-          <button
-            onClick={() =>
-              setError(null)
-            }
-          >
-            ✕
-          </button>
-
+        <div className="mb-6 rounded-xl border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300">
+          {error}
         </div>
       )}
 
+      {/* =====================================
+          CREATE USER FORM
+      ====================================== */}
 
-      {/* Loading */}
+      {showCreateForm && (
+        <form
+          onSubmit={handleCreateUser}
+          className="mb-8 rounded-2xl border border-slate-800 bg-slate-900 p-6"
+        >
+          <h2 className="text-lg font-semibold text-white">
+            Create User
+          </h2>
 
-      {loading ? (
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">
+                Name
+              </label>
 
-          {Array.from({
-            length: 6,
-          }).map((_, index) => (
-
-            <div
-              key={index}
-              className="animate-pulse rounded-3xl border border-white/10 bg-white/[0.04] p-5"
-            >
-
-              <div className="h-12 w-12 rounded-2xl bg-white/10" />
-
-              <div className="mt-5 h-4 w-1/2 rounded bg-white/10" />
-
-              <div className="mt-3 h-3 w-2/3 rounded bg-white/5" />
-
-              <div className="mt-5 h-14 rounded bg-white/5" />
-
+              <input
+                value={form.name}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    name: event.target.value,
+                  }))
+                }
+                placeholder="Enter name"
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-indigo-500"
+              />
             </div>
 
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">
+                Email
+              </label>
+
+              <input
+                type="email"
+                value={form.email}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    email: event.target.value,
+                  }))
+                }
+                placeholder="user@example.com"
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">
+                Password
+              </label>
+
+              <input
+                type="password"
+                value={form.password}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    password: event.target.value,
+                  }))
+                }
+                placeholder="Minimum 6 characters"
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">
+                Role
+              </label>
+
+              <select
+                value={form.role}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    role: event.target.value as
+                      | "ADMIN"
+                      | "USER",
+                  }))
+                }
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-indigo-500"
+              >
+                <option value="USER">
+                  USER
+                </option>
+
+                <option value="ADMIN">
+                  ADMIN
+                </option>
+              </select>
+            </div>
+
+          </div>
+
+          <div className="mt-5 flex justify-end">
+            <button
+              type="submit"
+              disabled={creating}
+              className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {creating
+                ? "Creating..."
+                : "Create User"}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* =====================================
+          EMPTY STATE
+      ====================================== */}
+
+      {users.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/50 p-12 text-center">
+          <h3 className="text-lg font-semibold text-white">
+            No users found
+          </h3>
+
+          <p className="mt-2 text-sm text-slate-400">
+            Create your first TaskFlow user.
+          </p>
+        </div>
+      ) : (
+        /* ===================================
+           USER CARDS
+        ==================================== */
+
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+
+          {users.map((user) => (
+            <div
+              key={user.id}
+              className="rounded-2xl border border-slate-800 bg-slate-900 p-5 transition hover:border-slate-700 hover:bg-slate-900/80"
+            >
+
+              {/* User Header */}
+              <div className="flex items-start justify-between gap-4">
+
+                <div className="flex min-w-0 items-center gap-3">
+
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-indigo-600 font-semibold text-white">
+                    {user.name
+                      ?.charAt(0)
+                      .toUpperCase() ?? "U"}
+                  </div>
+
+                  <div className="min-w-0">
+                    <h3 className="truncate font-semibold text-white">
+                      {user.name}
+                    </h3>
+
+                    <p className="truncate text-sm text-slate-400">
+                      {user.email}
+                    </p>
+                  </div>
+
+                </div>
+
+                <span
+                  className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                    user.role === "ADMIN"
+                      ? "bg-indigo-500/15 text-indigo-400"
+                      : "bg-emerald-500/15 text-emerald-400"
+                  }`}
+                >
+                  {user.role}
+                </span>
+
+              </div>
+
+              {/* Task Count */}
+              <div className="mt-6 rounded-xl bg-slate-950 p-4">
+                <p className="text-xs text-slate-500">
+                  Assigned Tasks
+                </p>
+
+                <p className="mt-1 text-2xl font-bold text-white">
+                  {user.taskCount}
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="mt-5 flex gap-3">
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate(
+                      `/users/${user.id}/tasks`
+                    )
+                  }
+                  className="flex-1 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-500"
+                >
+                  View Tasks
+                </button>
+
+                <button
+                  type="button"
+                  disabled={
+                    deletingId === user.id
+                  }
+                  onClick={() =>
+                    handleDeleteUser(user.id)
+                  }
+                  className="rounded-xl border border-red-900/50 bg-red-500/10 px-4 py-2.5 text-sm font-medium text-red-400 transition hover:bg-red-500/20 disabled:opacity-50"
+                >
+                  {deletingId === user.id
+                    ? "..."
+                    : "Delete"}
+                </button>
+
+              </div>
+
+            </div>
           ))}
 
         </div>
-
-      ) : users.length === 0 ? (
-
-        <div className="rounded-[2rem] border border-dashed border-white/10 bg-white/[0.03] px-6 py-16 text-center">
-
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-indigo-500/10 text-2xl text-indigo-300">
-            ◉
-          </div>
-
-          <h2 className="mt-5 text-xl font-semibold text-white">
-            No team members
-          </h2>
-
-          <p className="mt-2 text-sm text-slate-500">
-            Add your first member to start assigning work.
-          </p>
-
-          <button
-            onClick={() =>
-              setModalOpen(true)
-            }
-            className="mt-6 rounded-2xl bg-indigo-500 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-400"
-          >
-            Add member
-          </button>
-
-        </div>
-
-      ) : (
-
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-
-          {users.map(
-            ({
-              user,
-              assignedTaskCount,
-            }) => (
-
-              <UserCard
-                key={user.id}
-                user={user}
-                assignedTaskCount={
-                  assignedTaskCount
-                }
-                onDelete={
-                  handleDeleteRequest
-                }
-              />
-
-            )
-          )}
-
-        </div>
       )}
-
-
-      <UserModal
-        open={modalOpen}
-        onClose={() =>
-          setModalOpen(false)
-        }
-        onSubmit={handleCreate}
-      />
-
-
-      <ConfirmDialog
-        open={
-          deleteTarget !== null
-        }
-        title="Delete team member?"
-        description={
-          deleteTarget
-            ? `Are you sure you want to delete ${deleteTarget.name}? The backend may reject this if the user still owns projects or is assigned to tasks.`
-            : ""
-        }
-        confirmText="Delete member"
-        cancelText="Keep member"
-        onClose={() =>
-          setDeleteTarget(null)
-        }
-        onConfirm={
-          handleDeleteConfirm
-        }
-      />
 
     </div>
   );

@@ -1,17 +1,16 @@
 export type Role = "ADMIN" | "USER";
 
-export interface UserResponse {
-  id: number;
+export interface AuthResponse {
+  token: string;
+  userId: number;
   name: string;
   email: string;
   role: Role;
 }
 
-export type User = UserResponse;
-
-export interface UserRequest {
+export interface AuthUser {
+  userId: number;
   name: string;
   email: string;
-  password: string;
   role: Role;
 }

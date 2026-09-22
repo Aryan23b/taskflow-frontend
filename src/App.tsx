@@ -1,50 +1,119 @@
 import {
   BrowserRouter,
   Routes,
+  Navigate,
   Route,
-} from "react-router";
-
+} from "react-router-dom";
 
 import AppLayout from "./layouts/AppLayout";
+
 import Dashboard from "./pages/Dashboard";
 import Tasks from "./pages/Tasks";
 import Projects from "./pages/Projects";
 import Users from "./pages/Users";
+import Login from "./pages/Login";
 
+import MyTasks from "./pages/MyTasks";
+import UserTasks from "./pages/UserTasks";
+import ProjectTasks from "./pages/ProjectTasks";
 
+import ProtectedRoute from "./components/ProtectedRoute.tsx";
 
 export default function App() {
   return (
     <BrowserRouter>
-
       <Routes>
 
-        <Route element={<AppLayout />}>
+        {/* =========================
+            PUBLIC
+        ========================== */}
 
-          <Route
-            path="/"
-            element={<Dashboard />}
-          />
+        <Route
+          path="/login"
+          element={<Login />}
+        />
 
-          <Route
-            path="/tasks"
-            element={<Tasks />}
-          />
 
-          <Route
-            path="/projects"
-            element={<Projects />}
-          />
+        {/* =========================
+            AUTHENTICATED
+        ========================== */}
 
-          <Route
-            path="/users"
-            element={<Users />}
-          />
+        <Route element={<ProtectedRoute />}>
+
+          <Route element={<AppLayout />}>
+
+            {/* ADMIN + USER */}
+            <Route
+              path="/"
+              element={<Dashboard />}
+            />
+
+            {/* USER + ADMIN */}
+            <Route
+              path="/my-tasks"
+              element={<MyTasks />}
+            />
+
+
+            {/* =========================
+                ADMIN ONLY
+            ========================== */}
+
+            <Route
+              element={
+                <ProtectedRoute
+                  allowedRoles={["ADMIN"]}
+                />
+              }
+            >
+
+              <Route
+                path="/users"
+                element={<Users />}
+              />
+
+              <Route
+                path="/users/:id/tasks"
+                element={<UserTasks />}
+              />
+
+              <Route
+                path="/projects"
+                element={<Projects />}
+              />
+
+              <Route
+                path="/projects/:id/tasks"
+                element={<ProjectTasks />}
+              />
+
+              <Route
+                path="/tasks"
+                element={<Tasks />}
+              />
+
+            </Route>
+
+          </Route>
 
         </Route>
 
-      </Routes>
 
+        {/* =========================
+            FALLBACK
+        ========================== */}
+
+        <Route
+          path="*"
+          element={
+            <Navigate
+              to="/"
+              replace
+            />
+          }
+        />
+
+      </Routes>
     </BrowserRouter>
   );
 }

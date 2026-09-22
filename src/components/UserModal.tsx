@@ -10,7 +10,7 @@ interface UserModalProps {
   open: boolean;
   onClose: () => void;
   onSubmit: (
-    data: UserRequest
+    data: Pick<UserRequest, "name" | "email">
   ) => Promise<void>;
 }
 
