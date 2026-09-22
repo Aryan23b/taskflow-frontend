@@ -11,6 +11,7 @@ import StatCard from "../components/StatCard";
 
 import {
   getTasks,
+  getMyTasks,
 } from "../services/taskService";
 
 import {
@@ -25,6 +26,7 @@ import type {
   Task,
   TaskStatus,
 } from "../types/task";
+import { useAuth } from "../context/AuthContext";
 
 interface DashboardStats {
   total: number;
@@ -40,6 +42,7 @@ export default function Dashboard() {
 
   const navigate =
     useNavigate();
+  const { user } = useAuth();
 
 
   const [stats, setStats] =
@@ -69,7 +72,7 @@ export default function Dashboard() {
 
     loadDashboard();
 
-  }, []);
+  }, [user?.role]);
 
 
   async function getStatusCount(
@@ -94,6 +97,26 @@ export default function Dashboard() {
       setLoading(true);
       setError(null);
 
+      if (user?.role === "USER") {
+        const assignedTasks = await getMyTasks();
+
+        setStats({
+          total: assignedTasks.length,
+          todo: assignedTasks.filter(
+            (task) => task.status === "TODO"
+          ).length,
+          inProgress: assignedTasks.filter(
+            (task) => task.status === "IN_PROGRESS"
+          ).length,
+          Completed: assignedTasks.filter(
+            (task) => task.status === "COMPLETED"
+          ).length,
+          projects: 0,
+          users: 0,
+        });
+        setRecentTasks(assignedTasks.slice(0, 5));
+        return;
+      }
 
       const [
         totalPage,
@@ -222,14 +245,16 @@ export default function Dashboard() {
               View Tasks
             </button>
 
-            <button
-              onClick={() =>
-                navigate("/projects")
-              }
-              className="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-semibold text-slate-200 hover:bg-white/10"
-            >
-              View Projects
-            </button>
+            {user?.role === "ADMIN" && (
+              <button
+                onClick={() =>
+                  navigate("/projects")
+                }
+                className="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-semibold text-slate-200 hover:bg-white/10"
+              >
+                View Projects
+              </button>
+            )}
 
           </div>
 
@@ -285,12 +310,13 @@ export default function Dashboard() {
       {/* Secondary stats */}
       <section className="grid gap-4 sm:grid-cols-2">
 
-        <button
-          onClick={() =>
-            navigate("/projects")
-          }
-          className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 text-left transition hover:bg-white/[0.06]"
-        >
+        {user?.role === "ADMIN" && (
+          <button
+            onClick={() =>
+              navigate("/projects")
+            }
+            className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 text-left transition hover:bg-white/[0.06]"
+          >
 
           <p className="text-sm text-slate-400">
             Projects
@@ -304,7 +330,8 @@ export default function Dashboard() {
             Organize your work
           </p>
 
-        </button>
+          </button>
+        )}
 
 
         <button
