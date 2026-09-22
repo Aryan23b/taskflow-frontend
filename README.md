@@ -43,27 +43,39 @@ It was built to demonstrate a complete frontend-to-backend workflow: CRUD operat
 
 ##  Features
 
+### Authentication and authorization
+- JWT-based login and registration
+- Role-based access for `ADMIN` and `USER` accounts
+- Protected frontend routes
+- Admin-only project, team, and task management
+- Users can view and update the status of their assigned tasks
+
 ###  Dashboard
-- At-a-glance stats for total, to-do, in-progress, and completed tasks, plus project and team counts
+- Admin dashboard with task, project, and team statistics
+- User dashboard with assigned-task statistics
 - **Upcoming tasks** list, sorted by due date
 - **Completion ring** showing overall progress with completed vs. remaining counts
 
 ###  Tasks
-- Create, edit, and delete tasks
+- Admins can create, edit, and delete tasks
 - **Debounced search** so the API isn't hit on every keystroke
 - Filter by **status**, **priority**, and **project**
 - Sort by due date (ascending or descending) with a one-click **Clear filters**
 - **Server-side pagination**
 - Assign tasks to team members and set priority (Low / Medium / High)
-- Status tracking: To Do → In Progress → Completed
+- Status tracking: `TODO` → `IN_PROGRESS` → `COMPLETED`
+- Users can update the status of their assigned tasks
 
 ###  Projects
-- Create and manage projects
+- Admins can create and manage projects
 - Each project shows its owner and task count
+- A project cannot be deleted while it contains tasks
 
 ###  Team
-- Add and manage team members
+- Admins can add and manage team members
 - See how many tasks each member has been assigned
+- A user cannot be deleted while they own projects
+- Assigned tasks are unassigned when a user is deleted
 
 ###  Experience
 - Toast notifications and confirmation dialogs for destructive actions
@@ -139,7 +151,7 @@ flowchart TD
 | **Entity / DTO** | JPA entities map to tables. DTOs shape API requests and responses, including a generic `PageResponse<T>` for paginated results. |
 | **Exception handling** | Centralized handling that turns errors into consistent API responses. |
 
-**Cross-cutting features:** request validation, pagination, Swagger/OpenAPI docs, Spring Boot Actuator (`/actuator/health`), and CORS configuration for the Vercel frontend.
+**Cross-cutting features:** JWT authentication, role-based authorization, request validation, pagination, Swagger/OpenAPI docs, Spring Boot Actuator (`/actuator/health`), and CORS configuration for the deployed frontend.
 
 #### Data model
 
@@ -251,23 +263,27 @@ The backend package structure is covered in the Architecture section above.
 
 ---
 
-##  API Endpoints Used
+##  API Endpoints
 
-| Resource | Method | Endpoint |
-|---|---|---|
-| **Users** | `POST` | `/api/users` |
-| | `GET` | `/api/users` |
-| | `GET` | `/api/users/{id}` |
-| | `DELETE` | `/api/users/{id}` |
-| **Projects** | `POST` | `/api/projects` |
-| | `GET` | `/api/projects` |
-| | `GET` | `/api/projects/{id}` |
-| | `DELETE` | `/api/projects/{id}` |
-| **Tasks** | `POST` | `/api/tasks` |
-| | `GET` | `/api/tasks` |
-| | `GET` | `/api/tasks/{id}` |
-| | `PUT` | `/api/tasks/{id}` |
-| | `DELETE` | `/api/tasks/{id}` |
+| Resource | Method | Endpoint | Access |
+|---|---:|---|---|
+| Authentication | `POST` | `/api/auth/login` | Public |
+| Authentication | `POST` | `/api/auth/register` | Public |
+| Users | `GET` | `/api/users` | Admin |
+| Users | `POST` | `/api/users` | Admin |
+| Users | `GET` | `/api/users/{id}` | Admin |
+| Users | `DELETE` | `/api/users/{id}` | Admin |
+| Projects | `GET` | `/api/projects` | Admin |
+| Projects | `POST` | `/api/projects` | Admin |
+| Projects | `GET` | `/api/projects/{id}` | Admin |
+| Projects | `DELETE` | `/api/projects/{id}` | Admin |
+| Tasks | `GET` | `/api/tasks` | Admin |
+| Tasks | `POST` | `/api/tasks` | Admin |
+| Tasks | `GET` | `/api/tasks/{id}` | Admin |
+| Tasks | `PUT` | `/api/tasks/{id}` | Admin |
+| Tasks | `DELETE` | `/api/tasks/{id}` | Admin |
+| My tasks | `GET` | `/api/tasks/my` | User/Admin |
+| My tasks | `PATCH` | `/api/tasks/{id}/status` | User |
 
 ### How a request flows
 
@@ -323,6 +339,20 @@ Open **http://localhost:5173**.
 
 >  The backend must allow `http://localhost:5173` in its CORS configuration for the browser to reach the API.
 
+### Production environment
+
+For local development, use the local backend URL shown above. To use the deployed Render backend locally, set the Render URL instead:
+
+```env
+VITE_API_BASE_URL=https://your-backend.onrender.com
+```
+
+The backend must include the frontend origins in `APP_CORS_ALLOWED_ORIGINS`, for example:
+
+```env
+APP_CORS_ALLOWED_ORIGINS=http://localhost:5173,https://taskflow-frontend-xi-umber.vercel.app
+```
+
 ---
 
 ## ☁️ Deployment
@@ -337,13 +367,10 @@ Open **http://localhost:5173**.
 
 ##  Roadmap
 
-- [ ] User authentication with JWT login
-- [ ] Role-based authorization
 - [ ] Task comments and attachments
 - [ ] Activity history and notifications
-- [ ] Light/dark theme switching
 - [ ] Drag-and-drop Kanban board
-- [ ] Advanced dashboard statistics
+- [ ] Advanced dashboard analytics
 - [ ] Real-time updates with WebSockets
 
 ---
